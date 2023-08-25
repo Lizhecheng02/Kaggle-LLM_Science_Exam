@@ -1,0 +1,15 @@
+pandas
+datasets
+protobuf
+sentencepiece
+accelerate==0.21.0 
+peft==0.4.0 
+bitsandbytes==0.41.1 
+transformers==4.30.2 
+trl==0.4.7 
+langchain 
+einops==0.6.1
+matplotlib
+tqdm
+scipy
+transformers_stream_generator
