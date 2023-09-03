@@ -1,6 +1,6 @@
 pandas
 datasets
-protobuf
+protobuf==3.20.0
 sentencepiece
 accelerate==0.21.0 
 peft==0.4.0 
