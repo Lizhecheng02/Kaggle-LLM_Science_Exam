@@ -43,14 +43,14 @@ data = load_dataset("csv", data_files="Shuffled Data.csv", split="train")
 # data = load_dataset("csv", data_files="/kaggle/input/kaggle-llm-science-exam/train.csv", split="train")
 print(data)
 
-template = """Answer the following multiple choice question by giving the most appropriate response. Answer should be one among [A, B, C, D, E]\n
-Question: {prompt}\n
+template = """Suppose you are an expert on all subjects related to science. Answer the following multiple choice question by giving the most appropriate response. Answer should be one among [A, B, C, D, E]\n
+###Question: {prompt}\n
 A) {a}\n
 B) {b}\n
 C) {c}\n
 D) {d}\n
 E) {e}\n
-\n### Correct Answer: {answer}"""
+\n###Output the correct answer: {answer}"""
 
 prompt = PromptTemplate(template=template, input_variables=[
                         "prompt", "a", "b", "c", "d", "e", "answer"])
@@ -97,7 +97,17 @@ keep_indices_train = plot_sequence_lengths(data)
 data = data.select(keep_indices_train)
 print("The length of selected data:", len(data))
 
-model_id = "baichuan-inc/Baichuan-13B-Base"
+
+def format_func(example):
+    output_texts = []
+    for i in range(len(example)):
+        text = f"Suppose you are an expert on all subjects related to science. Answer the following multiple choice question by giving the most appropriate response. Answer should be one among [A, B, C, D, E]\n ###Question: {example['prompt']}\n A) {example['a']}\n B) {example['b']}\n C) {example['c']}\n D) {example['d']}\n E) {example['e']}\n ###Output the correct answer: {example['answer']}"
+        output_texts.append(text)
+    return output_texts
+
+
+model_id = "baichuan-inc/Baichuan-13B-Chat"
+# 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
 access_token = "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"
 
 tokenizer = AutoTokenizer.from_pretrained(
@@ -123,7 +133,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 model.config.use_cache = False
-# model.config.pretraining_tp=1
+model.config.pretraining_tp = 1
 
 print(model)
 
@@ -178,15 +188,15 @@ training_args = TrainingArguments(
     # load_best_model_at_end=True,
     # max_steps=2,
     num_train_epochs=2,
-    optim="paged_adamw_8bit",
+    optim="paged_adamw_32bit",
     fp16=True,
     run_name="baseline-sft",
     report_to="none",
     lr_scheduler_type="constant",
-    # warmup_ratio=0.01,
+    warmup_ratio=0.02,
 )
 
-response_template_with_context = "\n### Correct Answer::"
+response_template_with_context = "\n###Output the correct answer:"
 response_template_ids = tokenizer.encode(
     response_template_with_context, add_special_tokens=False)[2:]
 response_template_text = tokenizer.decode(response_template_ids)
@@ -201,16 +211,18 @@ trainer = SFTTrainer(
     args=training_args,
     tokenizer=tokenizer,
     peft_config=qlora_config,
-    dataset_text_field="text",
-    max_seq_length=2048,
+    # dataset_text_field="text",
+    formatting_func=format_func,
+    # max_seq_length=2048,
     packing=False,
-    data_collator=data_collator,
+    data_collator=data_collator
 )
 
 trainer.train()
 
 print("Saving The Final Model...")
-trainer.save_model("./finetuned_model_adapter")
+trainer.save_model("./dir1")
+trainer.model.save_pretrained("./dir2")
 
 print(model)
 

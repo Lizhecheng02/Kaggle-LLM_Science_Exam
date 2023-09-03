@@ -7,7 +7,7 @@ import transformers
 
 from datasets import load_dataset
 from torch import nn
-from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer, TrainingArguments
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer, TrainingArguments, Trainer
 from peft import LoraConfig, PeftModel, PeftConfig
 from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
 from langchain.prompts import PromptTemplate
@@ -40,60 +40,68 @@ data = load_dataset("csv", data_files="Shuffled Data.csv", split="train")
 # data = load_dataset("csv", data_files="train.csv", split="train")
 print(data)
 
-template = """
-Answer the following multiple choice question by giving the most appropriate response. Answer should be one among [A, B, C, D, E]\n
-Question: {prompt}\n
-A) {a}\n
-B) {b}\n
-C) {c}\n
-D) {d}\n
-E) {e}\n
-Answer: {answer}"""
+# template = """
+# Answer the following multiple choice question by giving the most appropriate response. Answer should be one among [A, B, C, D, E]\n
+# Question: {prompt}\n
+# A) {a}\n
+# B) {b}\n
+# C) {c}\n
+# D) {d}\n
+# E) {e}\n
+# Answer: {answer}"""
 
-prompt = PromptTemplate(template=template, input_variables=[
-                        "prompt", "a", "b", "c", "d", "e", "answer"])
+# prompt = PromptTemplate(template=template, input_variables=[
+#                         "prompt", "a", "b", "c", "d", "e", "answer"])
 
-sample = data[0]
-display(Markdown(prompt.format(prompt=sample["prompt"], a=sample["A"],
-                               b=sample["B"], c=sample["C"], d=sample["D"],
-                               e=sample["E"], answer=sample["answer"])))
-
-
-def format_text(example):
-    text = prompt.format(prompt=example["prompt"], a=example["A"],
-                         b=example["B"], c=example["C"], d=example["D"],
-                         e=example["E"], answer=example["answer"])
-    return {"text": text}
+# sample = data[0]
+# display(Markdown(prompt.format(prompt=sample["prompt"], a=sample["A"],
+#                                b=sample["B"], c=sample["C"], d=sample["D"],
+#                                e=sample["E"], answer=sample["answer"])))
 
 
-data = data.map(format_text)
-print(data)
+# def format_text(example):
+#     text = prompt.format(prompt=example["prompt"], a=example["A"],
+#                          b=example["B"], c=example["C"], d=example["D"],
+#                          e=example["E"], answer=example["answer"])
+#     return {"text": text}
 
 
-def plot_sequence_lengths(data, split="train", max_length=2048):
-    sequence_lengths = []
-    selected_indices = []
-
-    for idx, example in tqdm(enumerate(data), total=len(data)):
-        sequence_lengths.append(len(example["text"]))
-        if sequence_lengths[idx] < max_length:
-            selected_indices.append(idx)
-
-    plt.hist(sequence_lengths, bins=30)
-    plt.xlabel("Sequence Length")
-    plt.ylabel("Count")
-    plt.title("Distribution of Text Sequence Lengths")
-    plt.show()
-
-    print("Max Sequence Length:", max(sequence_lengths))
-    print("Min Sequence Length:", min(sequence_lengths))
-
-    return selected_indices
+# data = data.map(format_text)
+# print(data)
 
 
-keep_indices_train = plot_sequence_lengths(data)
-data = data.select(keep_indices_train)
-print("The length of selected data:", len(data))
+# def plot_sequence_lengths(data, split="train", max_length=2048):
+#     sequence_lengths = []
+#     selected_indices = []
+
+#     for idx, example in tqdm(enumerate(data), total=len(data)):
+#         sequence_lengths.append(len(example["text"]))
+#         if sequence_lengths[idx] < max_length:
+#             selected_indices.append(idx)
+
+#     plt.hist(sequence_lengths, bins=30)
+#     plt.xlabel("Sequence Length")
+#     plt.ylabel("Count")
+#     plt.title("Distribution of Text Sequence Lengths")
+#     plt.show()
+
+#     print("Max Sequence Length:", max(sequence_lengths))
+#     print("Min Sequence Length:", min(sequence_lengths))
+
+#     return selected_indices
+
+
+# keep_indices_train = plot_sequence_lengths(data)
+# data = data.select(keep_indices_train)
+# print("The length of selected data:", len(data))
+
+def format_func(example):
+    output_texts = []
+    for i in range(len(example)):
+        text = f"Suppose you are an expert on all subjects related to science. Answer the following multiple choice question by giving the most appropriate response. Answer should be one among [A, B, C, D, E]\n ###Question: {example['prompt']}\n A) {example['a']}\n B) {example['b']}\n C) {example['c']}\n D) {example['d']}\n E) {example['e']}\n ###Output the correct answer: {example['answer']}"
+        output_texts.append(text)
+    return output_texts
+
 
 model_id = "meta-llama/Llama-2-7b-hf"
 access_token = "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"
@@ -127,7 +135,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 model.config.use_cache = False
-# model.config.pretraining_tp=1
+model.config.pretraining_tp = 1
 
 print(model)
 
@@ -156,8 +164,10 @@ trainer = SFTTrainer(
     args=training_args,
     tokenizer=tokenizer,
     peft_config=qlora_config,
-    dataset_text_field="text",
-    max_seq_length=2048,
+    # dataset_text_field="text",
+    formatting_func=format_func,
+    # max_seq_length=2048,
+    packing=False
 )
 
 trainer.train()
