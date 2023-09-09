@@ -9,14 +9,20 @@ from dataclasses import dataclass
 from transformers import AutoTokenizer
 from transformers import EarlyStoppingCallback
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase, PaddingStrategy
-from transformers import AutoModelForMultipleChoice, TrainingArguments, Trainer
+from transformers import (
+    AutoModelForMultipleChoice,
+    TrainingArguments,
+    Trainer,
+    get_polynomial_decay_schedule_with_warmup,
+    AdamW
+)
 
-VER = 3
+VER = 1
 NUM_TRAIN_SAMPLES = 54_000
 USE_PEFT = False
 FREEZE_LAYERS = 0
-FREEZE_EMBEDDINGS = True
-MAX_INPUT = 512
+FREEZE_EMBEDDINGS = False
+MAX_INPUT = 384
 MODEL = 'microsoft/deberta-v3-large'
 
 df_valid = pd.read_csv('./totaldataset/train_with_context2.csv')
@@ -24,7 +30,7 @@ print('Validation data size:', df_valid.shape)
 
 df_train = pd.read_csv('./totaldataset/all_12_with_context2.csv')
 df_train = df_train.drop(columns="source")
-df_train = df_train.dropna()
+# df_train = df_train.dropna()
 df_train = df_train.fillna('')
 df_train = df_train.drop_duplicates(subset=['prompt', 'A', 'B', 'C', 'D', 'E'])
 # df_train = df_train[:2000]
@@ -48,12 +54,23 @@ index_to_option = {v: k for k, v in option_to_index.items()}
 tokenizer = AutoTokenizer.from_pretrained(MODEL)
 
 
+# def preprocess(example):
+#     first_sentence = [
+#         "[CLS] Suppose you are an expert on all problems related to science. Here are some extra information you get from the Internet: " + example['context']
+#     ] * 5
+#     second_sentences = [" ### The question is: " + example['prompt'] +
+#                         " [SEP] " + "The correct answer is: " + example[option] + " [SEP]" for option in 'ABCDE']
+#     tokenized_example = tokenizer(first_sentence, second_sentences, truncation='only_first',
+#                                   max_length=MAX_INPUT, add_special_tokens=False)
+#     # print(tokenized_example["attention_mask"][0])
+#     tokenized_example['label'] = option_to_index[example['answer']]
+
+#     return tokenized_example
+
 def preprocess(example):
-    first_sentence = [
-        "[CLS] Suppose you are an expert on all problems related to science. Here are some extra information you get from the Internet: " + example['context']
-    ] * 5
-    second_sentences = [" ### The question is: " + example['prompt'] +
-                        " [SEP] " + "The correct answer is: " + example[option] + " [SEP]" for option in 'ABCDE']
+    first_sentence = ["[CLS] " + example['context']] * 5
+    second_sentences = [" #### " + example['prompt'] +
+                        " [SEP] " + example[option] + " [SEP]" for option in 'ABCDE']
     tokenized_example = tokenizer(first_sentence, second_sentences, truncation='only_first',
                                   max_length=MAX_INPUT, add_special_tokens=False)
     # print(tokenized_example["attention_mask"][0])
@@ -128,7 +145,7 @@ def compute_metrics(p):
 
 training_args = TrainingArguments(
     # warmup_ratio=0.005,
-    learning_rate=3e-6,
+    learning_rate=4e-6,
     per_device_train_batch_size=1,
     per_device_eval_batch_size=1,
     num_train_epochs=2,
@@ -136,7 +153,7 @@ training_args = TrainingArguments(
     output_dir=f'./checkpoints_{VER}',
     overwrite_output_dir=True,
     fp16=True,
-    gradient_accumulation_steps=8,
+    gradient_accumulation_steps=16,
     logging_steps=100,
     evaluation_strategy='steps',
     eval_steps=100,
@@ -144,9 +161,22 @@ training_args = TrainingArguments(
     save_steps=100,
     load_best_model_at_end=False,
     metric_for_best_model='map@3',
-    lr_scheduler_type='cosine',
+    lr_scheduler_type='linear',
     weight_decay=0.01,
-    save_total_limit=2
+    save_total_limit=3
+)
+
+optimizer = AdamW(model.parameters(), lr=training_args.learning_rate)
+
+scheduler = get_polynomial_decay_schedule_with_warmup(
+    optimizer,
+    num_warmup_steps=0,
+    # num_training_steps=training_args.num_train_epochs *
+    # int(len(tokenized_dataset) * 1.0 / training_args.per_device_train_batch_size /
+    #     training_args.gradient_accumulation_steps),
+    num_training_steps=6750,
+    power=1.0,
+    lr_end=2.5e-6
 )
 
 trainer = Trainer(
@@ -157,7 +187,7 @@ trainer = Trainer(
     train_dataset=tokenized_dataset,
     eval_dataset=tokenized_dataset_valid,
     compute_metrics=compute_metrics,
-    # callbacks=[EarlyStoppingCallback(early_stopping_patience=15)],
+    optimizers=(optimizer, scheduler)
 )
 
 trainer.train()
