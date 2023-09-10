@@ -18,18 +18,20 @@ from transformers import (
 )
 
 VER = 1
-NUM_TRAIN_SAMPLES = 54_000
+NUM_TRAIN_SAMPLES = 70_000
 USE_PEFT = False
 FREEZE_LAYERS = 0
 FREEZE_EMBEDDINGS = False
 MAX_INPUT = 384
 MODEL = 'microsoft/deberta-v3-large'
 
-df_valid = pd.read_csv('./totaldataset/train_with_context2.csv')
+df_valid = pd.read_parquet('./clean_dataset/clean_200.parquet')
 print('Validation data size:', df_valid.shape)
 
-df_train = pd.read_csv('./totaldataset/all_12_with_context2.csv')
-df_train = df_train.drop(columns="source")
+df_train1 = pd.read_parquet('./clean_dataset/fillna_clean_60k.parquet')
+df_train2 = pd.read_parquet("./clean_dataset/fillna_sciencemcq.parquet")
+df_train1 = df_train1.drop(columns="source")
+df_train = pd.concat([df_train1, df_train2])
 # df_train = df_train.dropna()
 df_train = df_train.fillna('')
 df_train = df_train.drop_duplicates(subset=['prompt', 'A', 'B', 'C', 'D', 'E'])
@@ -45,7 +47,7 @@ for train_column in df_train.columns:
         df_train[train_column] = df_train[train_column].astype('string')
         df_train[train_column] = df_train[train_column].apply(clean)
 
-df_train = df_train.fillna('').sample(min(NUM_TRAIN_SAMPLES, len(df_train)))
+df_train = df_train.sample(min(NUM_TRAIN_SAMPLES, len(df_train)))
 print('Train data size:', df_train.shape)
 
 option_to_index = {option: idx for idx, option in enumerate('ABCDE')}
@@ -171,10 +173,10 @@ optimizer = AdamW(model.parameters(), lr=training_args.learning_rate)
 scheduler = get_polynomial_decay_schedule_with_warmup(
     optimizer,
     num_warmup_steps=0,
-    # num_training_steps=training_args.num_train_epochs *
-    # int(len(tokenized_dataset) * 1.0 / training_args.per_device_train_batch_size /
-    #     training_args.gradient_accumulation_steps),
-    num_training_steps=6750,
+    num_training_steps=training_args.num_train_epochs *
+    int(len(tokenized_dataset) * 1.0 / training_args.per_device_train_batch_size /
+        training_args.gradient_accumulation_steps),
+    # num_training_steps=6750,
     power=1.0,
     lr_end=2.5e-6
 )
