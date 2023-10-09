@@ -17,19 +17,19 @@ from transformers import (
     AdamW
 )
 
-VER = 1
-NUM_TRAIN_SAMPLES = 70_000
+VER = 2
+NUM_TRAIN_SAMPLES = 80_000
 USE_PEFT = False
 FREEZE_LAYERS = 0
 FREEZE_EMBEDDINGS = False
 MAX_INPUT = 384
 MODEL = 'microsoft/deberta-v3-large'
 
-df_valid = pd.read_parquet('./clean_dataset/clean_200.parquet')
+df_valid = pd.read_csv('total_dataset/train_with_context2.csv')
 print('Validation data size:', df_valid.shape)
 
-df_train1 = pd.read_parquet('./clean_dataset/fillna_clean_60k.parquet')
-df_train2 = pd.read_parquet("./clean_dataset/fillna_sciencemcq.parquet")
+df_train1 = pd.read_csv('total_dataset/all_12_with_context2.csv')
+df_train2 = pd.read_csv("total_dataset/original_sciencemcq.csv")
 df_train1 = df_train1.drop(columns="source")
 df_train = pd.concat([df_train1, df_train2])
 # df_train = df_train.dropna()
