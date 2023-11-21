@@ -1,4 +1,7 @@
-## This is 10th Solution For [Kaggle LLM Science Competition](https://www.kaggle.com/competitions/kaggle-llm-science-exam)
+# This is 10th Solution For [Kaggle LLM Science Competition](https://www.kaggle.com/competitions/kaggle-llm-science-exam)
+
+### Here is [Original Discussion](https://www.kaggle.com/competitions/kaggle-llm-science-exam/discussion/446797)
+
 
 ### Dataset
 
